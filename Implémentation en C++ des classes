@@ -1,0 +1,119 @@
+#include <iostream>
+#include <iomanip>
+#include <memory>
+#include <string>
+#include <vector>
+using namespace std;
+
+// ===== Classe mère abstraite =====
+class Personnel {
+protected:
+    string matricule;
+    string nom;
+    string prenom;
+    double salaireBase;
+
+    // Hook virtuel : chaque classe dérivée ajoute ses propres infos
+    virtual void afficherDetails() const {}
+
+public:
+    Personnel(const string& mat, const string& n, const string& p, double sb)
+        : matricule(mat), nom(n), prenom(p), salaireBase(sb) {}
+
+    virtual ~Personnel() = default;
+
+    // Méthodes virtuelles pures : rendent la classe abstraite
+    virtual double calculerSalaire() const = 0;
+    virtual string categorie() const = 0;
+
+    // Méthode virtuelle : affichage commun à tous les employés
+    virtual void afficher() const {
+        cout << fixed << setprecision(2);
+        cout << "Matricule       : " << matricule << "
+"
+             << "Nom             : " << nom << "
+"
+             << "Prenom          : " << prenom << "
+"
+             << "Categorie       : " << categorie() << "
+"
+             << "Salaire de base : " << salaireBase << " EUR
+";
+        afficherDetails();
+        cout << "Salaire total   : " << calculerSalaire() << " EUR
+";
+    }
+};
+
+// ===== Classes dérivées =====
+class Enseignant : public Personnel {
+    double indemnites;
+protected:
+    void afficherDetails() const override {
+        cout << "Indemnites      : " << fixed << setprecision(2) << indemnites << " EUR
+";
+    }
+public:
+    Enseignant(const string& mat, const string& n, const string& p, double sb, double ind)
+        : Personnel(mat, n, p, sb), indemnites(ind) {}
+
+    double calculerSalaire() const override { return salaireBase + indemnites; }
+    string categorie() const override { return "Enseignant"; }
+};
+
+class AgentAdministratif : public Personnel {
+    double primeResponsabilite;
+protected:
+    void afficherDetails() const override {
+        cout << "Prime resp.     : " << fixed << setprecision(2) << primeResponsabilite << " EUR
+";
+    }
+public:
+    AgentAdministratif(const string& mat, const string& n, const string& p, double sb, double prime)
+        : Personnel(mat, n, p, sb), primeResponsabilite(prime) {}
+
+    double calculerSalaire() const override { return salaireBase + primeResponsabilite; }
+    string categorie() const override { return "Agent administratif"; }
+};
+
+class Technicien : public Personnel {
+    double primeTechnique;
+protected:
+    void afficherDetails() const override {
+        cout << "Prime technique : " << fixed << setprecision(2) << primeTechnique << " EUR
+";
+    }
+public:
+    Technicien(const string& mat, const string& n, const string& p, double sb, double prime)
+        : Personnel(mat, n, p, sb), primeTechnique(prime) {}
+
+    double calculerSalaire() const override { return salaireBase + primeTechnique; }
+    string categorie() const override { return "Technicien"; }
+};
+
+// ===== Programme principal =====
+int main() {
+    // Collection polymorphe : pointeurs sur la classe mère
+    vector<unique_ptr<Personnel>> personnel;
+    personnel.push_back(make_unique<Enseignant>("E001", "Dupont", "Marie", 2800.0, 450.0));
+    personnel.push_back(make_unique<Enseignant>("E002", "Martin", "Paul", 3100.0, 600.0));
+    personnel.push_back(make_unique<AgentAdministratif>("A001", "Bernard", "Sophie", 1900.0, 250.0));
+    personnel.push_back(make_unique<Technicien>("T001", "Petit", "Luc", 1750.0, 300.0));
+    personnel.push_back(make_unique<Technicien>("T002", "Durand", "Alice", 1800.0, 180.0));
+
+    cout << "===== Fiches du personnel =====
+
+";
+    double masse = 0.0;
+    for (const auto& p : personnel) {
+        p->afficher();            // liaison dynamique : la bonne version est appelée
+        cout << "
+";
+        masse += p->calculerSalaire();
+    }
+
+    cout << fixed << setprecision(2);
+    cout << "Masse salariale totale : " << masse << " EUR
+";
+    return 0;
+}
