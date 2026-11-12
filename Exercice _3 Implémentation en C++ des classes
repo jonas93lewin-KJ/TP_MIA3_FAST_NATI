@@ -1,0 +1,271 @@
+
+
+#include <algorithm>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <numeric>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>   // pour afficher correctement les accents (UTF-8) dans la console
+#endif
+
+namespace {
+
+const std::string DEVISE = "DA";          // à adapter : DH, €, ...
+constexpr std::size_t LARGEUR_LIBELLE = 30;
+
+// Longueur d'une chaîne UTF-8 en caractères (et non en octets) : alignement correct des accents.
+std::size_t longueurUtf8(const std::string& s) {
+    return static_cast<std::size_t>(std::count_if(
+        s.begin(), s.end(), [](unsigned char c) { return (c & 0xC0) != 0x80; }));
+}
+
+}  // namespace
+
+// =====================================================================
+//  CLASSE MÈRE ABSTRAITE : Employe
+// =====================================================================
+class Employe {
+private:
+    std::string matricule_;
+    std::string nom_;
+    std::string prenom_;
+    double      salaireBase_;
+
+protected:
+    // Refuse les montants négatifs (utilisé par tous les constructeurs).
+    static double montantValide(double valeur, const std::string& champ) {
+        if (valeur < 0)
+            throw std::invalid_argument("Valeur négative interdite pour : " + champ);
+        return valeur;
+    }
+
+    // Affiche une ligne « libellé : montant » alignée.
+    static void afficherLigne(const std::string& libelle, double montant) {
+        const std::size_t n = longueurUtf8(libelle);
+        std::cout << "    " << libelle
+                  << std::string(n < LARGEUR_LIBELLE ? LARGEUR_LIBELLE - n : 0, ' ')
+                  << ": " << std::fixed << std::setprecision(2) << std::setw(12) << montant
+                  << ' ' << DEVISE << '\n';
+    }
+
+    // Affiche le salaire total : appel VIRTUEL à calculerSalaire().
+    void afficherSalaireTotal() const {
+        std::cout << "    " << std::string(LARGEUR_LIBELLE + 2 + 12 + 1 + DEVISE.size(), '-') << '\n';
+        afficherLigne("SALAIRE TOTAL", calculerSalaire());
+    }
+
+public:
+    Employe(std::string matricule, std::string nom, std::string prenom, double salaireBase)
+        : matricule_(std::move(matricule)),
+          nom_(std::move(nom)),
+          prenom_(std::move(prenom)),
+          salaireBase_(montantValide(salaireBase, "salaire de base")) {}
+
+    // Destructeur VIRTUEL : indispensable pour détruire correctement un objet
+    // dérivé via un pointeur de type Employe*.
+    virtual ~Employe() = default;
+
+    // ----- Accesseurs -----
+    const std::string& getMatricule() const { return matricule_; }
+    const std::string& getNom()       const { return nom_; }
+    const std::string& getPrenom()    const { return prenom_; }
+    double getSalaireBase()           const { return salaireBase_; }
+
+    // ----- Méthodes virtuelles pures : chaque catégorie DOIT les redéfinir -----
+    virtual double      calculerSalaire() const = 0;
+    virtual std::string getCategorie()    const = 0;
+
+    // ----- Méthode virtuelle « classique » : comportement par défaut, redéfinissable -----
+    virtual void afficher() const {
+        std::cout << "--------------------------------------------------\n"
+                  << "[" << getCategorie() << "] "
+                  << prenom_ << " " << nom_ << "  (matricule " << matricule_ << ")\n";
+        afficherLigne("Salaire de base", salaireBase_);
+    }
+};
+
+// =====================================================================
+//  CLASSE DÉRIVÉE : Enseignant
+// =====================================================================
+class Enseignant final : public Employe {
+private:
+    double indemniteRecherche_;
+    double indemniteEncadrement_;
+    int    heuresSup_;
+    double tauxHeureSup_;
+
+public:
+    Enseignant(std::string matricule, std::string nom, std::string prenom, double salaireBase,
+               double indemniteRecherche, double indemniteEncadrement,
+               int heuresSup, double tauxHeureSup)
+        : Employe(std::move(matricule), std::move(nom), std::move(prenom), salaireBase),
+          indemniteRecherche_(montantValide(indemniteRecherche, "indemnité de recherche")),
+          indemniteEncadrement_(montantValide(indemniteEncadrement, "indemnité d'encadrement")),
+          heuresSup_(static_cast<int>(montantValide(heuresSup, "heures supplémentaires"))),
+          tauxHeureSup_(montantValide(tauxHeureSup, "taux horaire")) {}
+
+    double calculerSalaire() const override {
+        return getSalaireBase() + indemniteRecherche_ + indemniteEncadrement_
+               + heuresSup_ * tauxHeureSup_;
+    }
+
+    std::string getCategorie() const override { return "Enseignant"; }
+
+    void afficher() const override {
+        Employe::afficher();   // réutilise l'affichage de la classe mère
+        afficherLigne("Indemnité de recherche", indemniteRecherche_);
+        afficherLigne("Indemnité d'encadrement", indemniteEncadrement_);
+        afficherLigne("Heures sup. (" + std::to_string(heuresSup_) + " h)",
+                      heuresSup_ * tauxHeureSup_);
+        afficherSalaireTotal();
+    }
+};
+
+// =====================================================================
+//  CLASSE DÉRIVÉE : AgentAdministratif
+// =====================================================================
+class AgentAdministratif final : public Employe {
+private:
+    double primeRendement_;
+    double primeResponsabilite_;
+
+public:
+    AgentAdministratif(std::string matricule, std::string nom, std::string prenom, double salaireBase,
+                       double primeRendement, double primeResponsabilite)
+        : Employe(std::move(matricule), std::move(nom), std::move(prenom), salaireBase),
+          primeRendement_(montantValide(primeRendement, "prime de rendement")),
+          primeResponsabilite_(montantValide(primeResponsabilite, "prime de responsabilité")) {}
+
+    double calculerSalaire() const override {
+        return getSalaireBase() + primeRendement_ + primeResponsabilite_;
+    }
+
+    std::string getCategorie() const override { return "Agent administratif"; }
+
+    void afficher() const override {
+        Employe::afficher();
+        afficherLigne("Prime de rendement", primeRendement_);
+        afficherLigne("Prime de responsabilité", primeResponsabilite_);
+        afficherSalaireTotal();
+    }
+};
+
+// =====================================================================
+//  CLASSE DÉRIVÉE : Technicien
+// =====================================================================
+class Technicien final : public Employe {
+private:
+    double primeTechnique_;
+    double primeRisque_;
+
+public:
+    Technicien(std::string matricule, std::string nom, std::string prenom, double salaireBase,
+               double primeTechnique, double primeRisque)
+        : Employe(std::move(matricule), std::move(nom), std::move(prenom), salaireBase),
+          primeTechnique_(montantValide(primeTechnique, "prime technique")),
+          primeRisque_(montantValide(primeRisque, "prime de risque")) {}
+
+    double calculerSalaire() const override {
+        return getSalaireBase() + primeTechnique_ + primeRisque_;
+    }
+
+    std::string getCategorie() const override { return "Technicien"; }
+
+    void afficher() const override {
+        Employe::afficher();
+        afficherLigne("Prime technique", primeTechnique_);
+        afficherLigne("Prime de risque", primeRisque_);
+        afficherSalaireTotal();
+    }
+};
+
+// =====================================================================
+//  PROGRAMME PRINCIPAL
+// =====================================================================
+int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
+    // Employe e("X", "Y", "Z", 1000);   // ERREUR de compilation : Employe est abstraite
+
+    try {
+        // Collection hétérogène : un seul conteneur, trois catégories d'employés.
+        // unique_ptr => la mémoire est libérée automatiquement (via le destructeur virtuel).
+        std::vector<std::unique_ptr<Employe>> personnel;
+
+        personnel.push_back(std::make_unique<Enseignant>(
+            "ENS-001", "Benali", "Karim", 60000, 12000, 8000, 10, 900));
+        personnel.push_back(std::make_unique<Enseignant>(
+            "ENS-002", "Haddad", "Amina", 72000, 15000, 10000, 6, 1100));
+        personnel.push_back(std::make_unique<AgentAdministratif>(
+            "ADM-001", "Mansouri", "Sofiane", 38000, 5000, 3000));
+        personnel.push_back(std::make_unique<AgentAdministratif>(
+            "ADM-002", "Kaci", "Lydia", 41000, 4500, 6000));
+        personnel.push_back(std::make_unique<Technicien>(
+            "TEC-001", "Ouali", "Yacine", 35000, 4000, 2500));
+        personnel.push_back(std::make_unique<Technicien>(
+            "TEC-002", "Bensaid", "Nadia", 37000, 4500, 3500));
+
+        // ---- 1. Affichage polymorphe (liaison dynamique) ----
+        std::cout << "==================== PERSONNEL ====================\n";
+        for (const auto& e : personnel)
+            e->afficher();          // la version appelée dépend du TYPE RÉEL de l'objet
+        std::cout << "--------------------------------------------------\n\n";
+
+        // ---- 2. Masse salariale totale ----
+        const double masse = std::accumulate(
+            personnel.begin(), personnel.end(), 0.0,
+            [](double acc, const auto& e) { return acc + e->calculerSalaire(); });
+        std::cout << "Masse salariale totale : " << std::fixed << std::setprecision(2)
+                  << masse << ' ' << DEVISE << "\n\n";
+
+        // ---- 3. Effectif et masse salariale par catégorie ----
+        std::map<std::string, std::pair<int, double>> parCategorie;
+        for (const auto& e : personnel) {
+            auto& stats = parCategorie[e->getCategorie()];
+            ++stats.first;
+            stats.second += e->calculerSalaire();
+        }
+        std::cout << "Répartition par catégorie :\n";
+        for (const auto& [categorie, stats] : parCategorie)
+            std::cout << "  " << std::left << std::setw(22) << categorie << std::right
+                      << stats.first << " employé(s)   "
+                      << std::setw(12) << stats.second << ' ' << DEVISE << '\n';
+
+        // ---- 4. Classement par salaire décroissant (pointeurs non propriétaires) ----
+        std::vector<const Employe*> classement;
+        for (const auto& e : personnel) classement.push_back(e.get());
+        std::sort(classement.begin(), classement.end(),
+                  [](const Employe* a, const Employe* b) {
+                      return a->calculerSalaire() > b->calculerSalaire();
+                  });
+        std::cout << "\nClassement par salaire décroissant :\n";
+        int rang = 1;
+        for (const Employe* e : classement)
+            std::cout << "  " << rang++ << ". " << e->getPrenom() << " " << e->getNom()
+                      << " (" << e->getCategorie() << ") - "
+                      << e->calculerSalaire() << ' ' << DEVISE << '\n';
+
+        // ---- 5. Contrôle des données : un salaire négatif est rejeté ----
+        std::cout << "\nTest de validation :\n";
+        try {
+            Technicien invalide("TEC-999", "Test", "Test", -500, 0, 0);
+        } catch (const std::invalid_argument& ex) {
+            std::cout << "  Création refusée -> " << ex.what() << '\n';
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Erreur : " << ex.what() << '\n';
+        return 1;
+    }
+
+    return 0;
+}
+
